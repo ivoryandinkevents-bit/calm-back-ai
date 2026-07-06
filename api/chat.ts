@@ -77,6 +77,14 @@ OUTPUT — generate in exactly this structure, using THEIR words elevated but ne
 
 TONE OF OUTPUT: British English. Warm, direct, specific. No hustle-culture language: no "boss babe," "smash your goals," "10x," "game-changer." The reader should feel seen, not sold to.`;
 
+const TEST_DRIVE_PROMPT = `You are a social media copywriter. The user will give you an "AI Super Sheet" — a strategic brand document about a small business owner. Your ONLY job: write ONE Instagram caption for their business, following the sheet's voice rules to the letter.
+
+Rules:
+- Use their real phrases from the sheet where natural. Respect every "never sounds like" and banned word.
+- Structure: scroll-stopping first line, short punchy body (60-120 words), soft call to action matching their offers, 3-5 niche hashtags.
+- British English. Sound like a real person talking, not marketing.
+- Output ONLY the caption. No preamble, no explanation, no quote marks around it.`;
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -85,14 +93,43 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { messages } = req.body;
-
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Invalid messages format' });
-  }
+  const { messages, mode, sheet } = req.body;
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'API key not configured' });
+  }
+
+  if (mode === 'test-drive') {
+    if (typeof sheet !== 'string' || !sheet.trim()) {
+      return res.status(400).json({ error: 'Missing sheet' });
+    }
+    try {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 1000,
+        system: TEST_DRIVE_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: `Here is my AI Super Sheet:\n\n${sheet}\n\nWrite me one Instagram caption.`,
+          },
+        ],
+      });
+      const content = response.content[0];
+      if (content.type !== 'text') {
+        return res.status(500).json({ error: 'Unexpected response format' });
+      }
+      return res.status(200).json({ message: content.text });
+    } catch (error) {
+      console.error('Anthropic API error:', JSON.stringify(error, Object.getOwnPropertyNames(error as object)));
+      return res
+        .status(500)
+        .json({ error: 'Something hiccuped — try that again' });
+    }
+  }
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'Invalid messages format' });
   }
 
   const apiMessages =

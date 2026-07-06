@@ -6,20 +6,44 @@ interface Message {
   content: string;
 }
 
+const TOTAL_QUESTIONS = 16;
+const STORAGE_KEY = 'allAboutYou.v1';
+
 function extractSheet(text: string): string | null {
   const match = text.match(/^# .*AI Super Sheet.*$/m);
   if (!match || match.index === undefined) return null;
   return text.slice(match.index).trim();
 }
 
+interface SavedState {
+  messages: Message[];
+  sheetContent: string | null;
+}
+
+function loadSaved(): SavedState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedState;
+    if (!Array.isArray(parsed.messages) || parsed.messages.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export default function AllAboutYou() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const saved = useRef<SavedState | null>(loadSaved());
+  const [messages, setMessages] = useState<Message[]>(saved.current?.messages ?? []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sheetContent, setSheetContent] = useState<string | null>(null);
+  const [sheetContent, setSheetContent] = useState<string | null>(saved.current?.sheetContent ?? null);
+  const [showReveal, setShowReveal] = useState<boolean>(!!saved.current?.sheetContent);
   const [copied, setCopied] = useState(false);
+  const [testPost, setTestPost] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [postCopied, setPostCopied] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,6 +55,28 @@ export default function AllAboutYou() {
       initializeChat();
     }
   }, []);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, sheetContent }));
+      } catch {
+        // storage full or blocked — carry on without persistence
+      }
+    }
+  }, [messages, sheetContent]);
+
+  const answeredCount = messages.filter((m) => m.role === 'user').length;
+  const currentQuestion = Math.min(answeredCount + 1, TOTAL_QUESTIONS);
+
+  const startAgain = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setMessages([]);
+    setSheetContent(null);
+    setShowReveal(false);
+    setTestPost(null);
+    initializeChat();
+  };
 
   const initializeChat = async () => {
     setLoading(true);
@@ -79,12 +125,14 @@ export default function AllAboutYou() {
       const data = await response.json();
       const assistantMessage = data.message;
 
+      setMessages([...newMessages, { role: 'assistant', content: assistantMessage }]);
+
       const sheet = extractSheet(assistantMessage);
       if (sheet) {
         setSheetContent(sheet);
+        // Let the closing message land, then reveal
+        setTimeout(() => setShowReveal(true), 1200);
       }
-
-      setMessages([...newMessages, { role: 'assistant', content: assistantMessage }]);
     } catch (error) {
       console.error('Error:', error);
       setMessages([
@@ -114,10 +162,18 @@ export default function AllAboutYou() {
     });
   };
 
-  const sheetFilename = () => {
-    const title = sheetContent?.match(/^# (.*?) — AI Super Sheet/m)?.[1] ?? 'My-Business';
-    return `${title.replace(/[^a-zA-Z0-9]+/g, '-')}-AI-Super-Sheet`;
+  const copyPost = () => {
+    if (!testPost) return;
+    navigator.clipboard.writeText(testPost).then(() => {
+      setPostCopied(true);
+      setTimeout(() => setPostCopied(false), 2000);
+    });
   };
+
+  const businessName = sheetContent?.match(/^# (.*?) — AI Super Sheet/m)?.[1] ?? 'Your Business';
+
+  const sheetFilename = () =>
+    `${businessName.replace(/[^a-zA-Z0-9]+/g, '-')}-AI-Super-Sheet`;
 
   const downloadPdf = () => {
     window.print();
@@ -136,6 +192,127 @@ export default function AllAboutYou() {
     URL.revokeObjectURL(url);
   };
 
+  const runTestDrive = async () => {
+    if (!sheetContent || testLoading) return;
+    setTestLoading(true);
+    setTestPost(null);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'test-drive', sheet: sheetContent }),
+      });
+      if (!response.ok) throw new Error('API error');
+      const data = await response.json();
+      setTestPost(data.message);
+    } catch (error) {
+      console.error('Error:', error);
+      setTestPost('Something hiccuped — tap the button to try again.');
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  // ============ REVEAL SCREEN ============
+  if (showReveal && sheetContent) {
+    return (
+      <>
+        <div className="min-h-screen bg-[#f6f1ec] print:hidden">
+          {/* Reveal header */}
+          <div className="bg-[#8C46D6] text-white px-4 pt-10 pb-14 text-center relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_30%_20%,white_0%,transparent_50%)]"></div>
+            <p className="text-xs uppercase tracking-[0.25em] text-white/80 mb-3 relative">Your brain, on paper</p>
+            <h1 className="text-3xl sm:text-4xl font-bold relative leading-tight">{businessName}</h1>
+            <p className="text-white/90 mt-2 text-sm relative">AI Super Sheet · built with Calm Back with Gem</p>
+          </div>
+
+          {/* Action bar */}
+          <div className="max-w-2xl mx-auto px-4 -mt-6 relative">
+            <div className="bg-white rounded-2xl shadow-lg border border-[#e8e2da] p-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copySheet}
+                className="flex-1 min-w-[100px] bg-[#c9a24d] text-[#2f2a27] py-2.5 rounded-full font-bold text-sm hover:opacity-90 transition"
+              >
+                {copied ? '✓ Copied!' : 'Copy'}
+              </button>
+              <button
+                type="button"
+                onClick={downloadPdf}
+                className="flex-1 min-w-[100px] bg-[#8C46D6] text-white py-2.5 rounded-full font-bold text-sm hover:opacity-90 transition"
+              >
+                Save as PDF
+              </button>
+              <button
+                type="button"
+                onClick={downloadDoc}
+                className="flex-1 min-w-[100px] bg-[#5a3e5b] text-white py-2.5 rounded-full font-bold text-sm hover:opacity-90 transition"
+              >
+                Word / Docs
+              </button>
+            </div>
+          </div>
+
+          {/* Test drive */}
+          <div className="max-w-2xl mx-auto px-4 mt-6">
+            <div className="bg-white rounded-2xl border-2 border-[#8C46D6] p-5 shadow-sm">
+              <h2 className="font-bold text-[#2f2a27] text-lg">Watch it write as you</h2>
+              <p className="text-sm text-[#5a3e5b] mt-1 mb-4">
+                The proof. One tap and AI writes an Instagram post using your Super Sheet — in your voice, about your business.
+              </p>
+              <button
+                type="button"
+                onClick={runTestDrive}
+                disabled={testLoading}
+                className="w-full bg-[#8C46D6] text-white py-3 rounded-full font-bold text-sm hover:opacity-90 transition disabled:opacity-60"
+              >
+                {testLoading ? 'Writing as you…' : testPost ? 'Write another one' : '✨ Try it now'}
+              </button>
+
+              {testPost && (
+                <div className="mt-4 bg-[#faf6ff] border border-[#e8d4f5] rounded-xl p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#8C46D6] mb-2">Instagram post · written as you</p>
+                  <p className="text-sm text-[#2f2a27] whitespace-pre-wrap leading-relaxed">{testPost}</p>
+                  <button
+                    type="button"
+                    onClick={copyPost}
+                    className="mt-3 bg-[#c9a24d] text-[#2f2a27] px-4 py-2 rounded-full font-bold text-xs hover:opacity-90 transition"
+                  >
+                    {postCopied ? '✓ Copied!' : 'Copy post'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* The sheet itself */}
+          <div className="max-w-2xl mx-auto px-4 mt-6 pb-10">
+            <div className="bg-white rounded-2xl border border-[#e8e2da] shadow-sm p-6 sm:p-8">
+              <div className="chat-md text-[15px] leading-relaxed">
+                <ReactMarkdown>{sheetContent}</ReactMarkdown>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-4 mt-6 text-sm">
+              <button type="button" onClick={() => setShowReveal(false)} className="text-[#5a3e5b] underline">
+                Back to the chat
+              </button>
+              <button type="button" onClick={startAgain} className="text-[#5a3e5b] underline">
+                Start again
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Print-only rendering (also the .doc source) */}
+        <div ref={printRef} className="sheet-print hidden print:block">
+          <ReactMarkdown>{sheetContent}</ReactMarkdown>
+        </div>
+      </>
+    );
+  }
+
+  // ============ CHAT SCREEN ============
   return (
     <>
       <div className="flex flex-col h-screen bg-[#f6f1ec] print:hidden">
@@ -144,10 +321,32 @@ export default function AllAboutYou() {
           <div className="w-9 h-9 rounded-full bg-[#8C46D6] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
             AI
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-semibold text-[#2f2a27] text-sm leading-tight">All About You</p>
             <p className="text-xs text-[#5a3e5b]">by Calm Back with Gem</p>
           </div>
+          {!sheetContent && answeredCount > 0 && (
+            <div className="text-right">
+              <p className="text-xs font-bold text-[#8C46D6]">
+                Question {currentQuestion} of {TOTAL_QUESTIONS}
+              </p>
+              <div className="w-24 h-1.5 bg-[#efe6f9] rounded-full mt-1 overflow-hidden">
+                <div
+                  className="h-full bg-[#8C46D6] rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min((answeredCount / TOTAL_QUESTIONS) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+          {sheetContent && (
+            <button
+              type="button"
+              onClick={() => setShowReveal(true)}
+              className="bg-[#c9a24d] text-[#2f2a27] px-4 py-2 rounded-full font-bold text-xs hover:opacity-90 transition"
+            >
+              View your sheet
+            </button>
+          )}
         </div>
 
         {/* Chat messages */}
@@ -183,40 +382,12 @@ export default function AllAboutYou() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Export buttons (once sheet is generated) */}
-        {sheetContent && (
-          <div className="px-4 py-3 border-t border-[#e8e2da] bg-white flex gap-2">
-            <button
-              type="button"
-              onClick={copySheet}
-              className="flex-1 bg-[#c9a24d] text-[#2f2a27] py-3 rounded-full font-bold text-sm hover:opacity-90 transition"
-            >
-              {copied ? '✓ Copied!' : 'Copy'}
-            </button>
-            <button
-              type="button"
-              onClick={downloadPdf}
-              className="flex-1 bg-[#8C46D6] text-white py-3 rounded-full font-bold text-sm hover:opacity-90 transition"
-            >
-              Save as PDF
-            </button>
-            <button
-              type="button"
-              onClick={downloadDoc}
-              className="flex-1 bg-[#5a3e5b] text-white py-3 rounded-full font-bold text-sm hover:opacity-90 transition"
-            >
-              Word / Docs
-            </button>
-          </div>
-        )}
-
         {/* Input */}
         <form
           onSubmit={sendMessage}
           className="border-t border-[#e8e2da] bg-white p-3 flex gap-2"
         >
           <textarea
-            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -234,13 +405,6 @@ export default function AllAboutYou() {
           </button>
         </form>
       </div>
-
-      {/* Print-only rendering of the Super Sheet (also the source for .doc export) */}
-      {sheetContent && (
-        <div ref={printRef} className="sheet-print hidden print:block">
-          <ReactMarkdown>{sheetContent}</ReactMarkdown>
-        </div>
-      )}
     </>
   );
 }
