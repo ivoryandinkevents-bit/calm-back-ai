@@ -11,6 +11,7 @@ import AuthenticityAi from './pages/AuthenticityAi'
 import EnvironmentalImpact from './pages/EnvironmentalImpact'
 import TechStack from './pages/TechStack'
 import PeopleToFollow from './pages/PeopleToFollow'
+import AllAboutYou from './components/AllAboutYou'
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
           <Route path="/tech-stack" element={<TechStack />} />
           <Route path="/people-to-follow" element={<PeopleToFollow />} />
         </Route>
+        <Route path="/all-about-you" element={<AllAboutYou />} />
       </Routes>
     </Router>
   )
