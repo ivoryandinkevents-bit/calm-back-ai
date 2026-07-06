@@ -82,15 +82,20 @@ export default async function handler(
     return res.status(500).json({ error: 'API key not configured' });
   }
 
+  const apiMessages =
+    messages.length === 0
+      ? [{ role: 'user' as const, content: "Let's begin." }]
+      : messages.map((msg: { role: string; content: string }) => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content,
+        }));
+
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4000,
       system: SYSTEM_PROMPT,
-      messages: messages.map((msg: { role: string; content: string }) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      })),
+      messages: apiMessages,
     });
 
     const content = response.content[0];
@@ -100,7 +105,7 @@ export default async function handler(
 
     return res.status(200).json({ message: content.text });
   } catch (error) {
-    console.error('Anthropic API error:', error);
+    console.error('Anthropic API error:', JSON.stringify(error, Object.getOwnPropertyNames(error as object)));
     return res
       .status(500)
       .json({ error: 'Something hiccuped — try sending that again' });
