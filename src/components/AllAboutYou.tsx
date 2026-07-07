@@ -22,6 +22,11 @@ interface SavedState {
 
 function loadSaved(): SavedState | null {
   try {
+    if (new URLSearchParams(window.location.search).has('fresh')) {
+      localStorage.removeItem(STORAGE_KEY);
+      window.history.replaceState(null, '', window.location.pathname);
+      return null;
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SavedState;
@@ -326,16 +331,25 @@ export default function AllAboutYou() {
             <p className="text-xs text-[#5a3e5b]">by Calm Back with Gem</p>
           </div>
           {!sheetContent && answeredCount > 0 && (
-            <div className="text-right">
-              <p className="text-xs font-bold text-[#8C46D6]">
-                Question {currentQuestion} of {TOTAL_QUESTIONS}
-              </p>
-              <div className="w-24 h-1.5 bg-[#efe6f9] rounded-full mt-1 overflow-hidden">
-                <div
-                  className="h-full bg-[#8C46D6] rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min((answeredCount / TOTAL_QUESTIONS) * 100, 100)}%` }}
-                ></div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-xs font-bold text-[#8C46D6]">
+                  Question {currentQuestion} of {TOTAL_QUESTIONS}
+                </p>
+                <div className="w-24 h-1.5 bg-[#efe6f9] rounded-full mt-1 overflow-hidden">
+                  <div
+                    className="h-full bg-[#8C46D6] rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min((answeredCount / TOTAL_QUESTIONS) * 100, 100)}%` }}
+                  ></div>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={startAgain}
+                className="text-xs text-[#5a3e5b] underline flex-shrink-0"
+              >
+                Start again
+              </button>
             </div>
           )}
           {sheetContent && (
