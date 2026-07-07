@@ -351,6 +351,9 @@ export default function AllAboutYou() {
 
         {/* Chat messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <p className="text-[11px] text-[#5a3e5b]/80 text-center max-w-md mx-auto leading-snug">
+            Your answers are sent to Anthropic (the AI provider) to build your sheet. We don't store them on any server — your conversation lives only on this device. Avoid sharing sensitive personal data.
+          </p>
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
