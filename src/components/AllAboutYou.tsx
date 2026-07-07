@@ -330,8 +330,8 @@ export default function AllAboutYou() {
             <p className="font-semibold text-[#2f2a27] text-sm leading-tight">All About You</p>
             <p className="text-xs text-[#5a3e5b]">by Calm Back with Gem</p>
           </div>
-          {!sheetContent && answeredCount > 0 && (
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            {!sheetContent && answeredCount > 0 && (
               <div className="text-right">
                 <p className="text-xs font-bold text-[#8C46D6]">
                   Question {currentQuestion} of {TOTAL_QUESTIONS}
@@ -343,24 +343,24 @@ export default function AllAboutYou() {
                   ></div>
                 </div>
               </div>
+            )}
+            {sheetContent && (
               <button
                 type="button"
-                onClick={startAgain}
-                className="text-xs text-[#5a3e5b] underline flex-shrink-0"
+                onClick={() => setShowReveal(true)}
+                className="bg-[#c9a24d] text-[#2f2a27] px-4 py-2 rounded-full font-bold text-xs hover:opacity-90 transition"
               >
-                Start again
+                View your sheet
               </button>
-            </div>
-          )}
-          {sheetContent && (
+            )}
             <button
               type="button"
-              onClick={() => setShowReveal(true)}
-              className="bg-[#c9a24d] text-[#2f2a27] px-4 py-2 rounded-full font-bold text-xs hover:opacity-90 transition"
+              onClick={startAgain}
+              className="text-xs text-[#5a3e5b] underline flex-shrink-0"
             >
-              View your sheet
+              New chat
             </button>
-          )}
+          </div>
         </div>
 
         {/* Chat messages */}
